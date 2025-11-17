@@ -3,7 +3,9 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\BaseController;
- 
+use App\Http\Controllers\ServiceCounterController;
+use App\Http\Controllers\ServiceQueueController;
+
 
 /*
 |--------------------------------------------------------------------------
@@ -17,15 +19,17 @@ use App\Http\Controllers\BaseController;
 */
 
 
-Route::controller(BaseController::class)->group(function () {
-Route::post('createCustomer', 'createCustomer');
-Route::post('createCustomer', 'updateCustomer');
-Route::get('getCustomers', 'getCustomers');
-
+Route::controller(ServiceCounterController::class)->group(function () {
+    Route::get('counters', 'listCounters');
+    Route::get('counters/{id}', 'getCounter');
+    Route::post('create/counters', 'createCounter');
+    Route::post('update/counters/{id}', 'updateCounter');
+    Route::post('archive/counters/{id}', 'archiveCounter');
 });
 
 
-//example - having a middleware
-// Route::controller(BaseController::class)->middleware(['auth:sanctum'])->group(function () {
-//     Route::get('get', 'getAll')->middleware('teacher');
-// });
+Route::controller(ServiceQueueController::class)->group(function () {
+    Route::get('queue/{counterId?}', 'listQueue');
+    Route::post('queue/add-person', 'addPerson');
+    Route::post('queue/serve-person/{id}', 'servePerson');
+});
