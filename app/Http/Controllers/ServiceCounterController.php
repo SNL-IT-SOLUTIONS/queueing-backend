@@ -13,8 +13,21 @@ class ServiceCounterController extends Controller
     public function listCounters()
     {
         $counters = ServiceCounter::all();
+
+        // Summary stats
+        $totalCounters = $counters->count();
+        $activeCounters = $counters->where('status', 'Active')->count();
+        $totalWaiting = $counters->sum('queue_waiting');
+        $totalServing = $counters->sum('queue_serving');
+
         return response()->json([
             'success' => true,
+            'summary' => [
+                'total_counters' => $totalCounters,
+                'active_counters' => $activeCounters,
+                'total_waiting' => $totalWaiting,
+                'total_serving' => $totalServing,
+            ],
             'data' => $counters
         ]);
     }
