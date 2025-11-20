@@ -5,7 +5,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\BaseController;
 use App\Http\Controllers\ServiceCounterController;
 use App\Http\Controllers\ServiceQueueController;
-
+use App\Http\Controllers\AuthController;
 
 /*
 |--------------------------------------------------------------------------
@@ -17,6 +17,12 @@ use App\Http\Controllers\ServiceQueueController;
 | is assigned the "api" middleware group. Enjoy building your API!
 |
 */
+
+//AuthController
+Route::controller(AuthController::class)->group(function () {
+    Route::post('login', 'login');
+    Route::post('logout', 'logout')->middleware('auth:sanctum');
+});
 
 
 Route::controller(ServiceCounterController::class)->group(function () {
