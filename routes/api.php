@@ -6,7 +6,9 @@ use App\Http\Controllers\BaseController;
 use App\Http\Controllers\ServiceCounterController;
 use App\Http\Controllers\ServiceQueueController;
 use App\Http\Controllers\AuthController;
-
+use App\Http\Controllers\UserController;
+use App\Events\ServiceQueueUpdated;
+use App\Events\QueueUpdated;
 /*
 |--------------------------------------------------------------------------
 | API Routes
@@ -43,4 +45,15 @@ Route::controller(ServiceQueueController::class)->group(function () {
     Route::post('queue/recall/{queueId}', 'recall');
     Route::post('queue/serve-person/{queueId}', 'servePerson');
     Route::post('queue/complete/{queueId}', 'completeQueue');
+});
+
+Route::get('/test-socket', function () {
+    $queue = \App\Models\ServiceQueue::first(); // pick the first item in DB
+    if (!$queue) {
+        return "No queue items exist";
+    }
+
+    event(new \App\Events\ServiceQueueUpdated($queue));
+
+    return "Event fired";
 });
