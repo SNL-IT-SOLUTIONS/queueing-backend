@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\ServiceCounter;
 use Illuminate\Http\Request;
+use App\Events\QueueUpdated;
 
 class ServiceCounterController extends Controller
 {
@@ -70,6 +71,8 @@ class ServiceCounterController extends Controller
             'status'       => $request->status ?? 'Active',
         ]);
 
+        event(new QueueUpdated($counter));
+
         return response()->json([
             'success' => true,
             'message' => 'Service counter created successfully.',
@@ -100,6 +103,8 @@ class ServiceCounterController extends Controller
 
         $counter->update($request->only(['counter_name', 'prefix', 'status']));
 
+        event(new QueueUpdated($counter));
+
         return response()->json([
             'success' => true,
             'message' => 'Service counter updated successfully.',
@@ -122,6 +127,9 @@ class ServiceCounterController extends Controller
         }
 
         $counter->is_archived = true;
+        $counter->save();
+
+        event(new QueueUpdated($counter));
 
         return response()->json([
             'success' => true,
@@ -143,6 +151,9 @@ class ServiceCounterController extends Controller
         }
 
         $counter->increment('queue_waiting');
+        $counter->refresh();
+
+        event(new QueueUpdated($counter));
 
         return response()->json([
             'success' => true,
@@ -164,6 +175,9 @@ class ServiceCounterController extends Controller
         }
 
         $counter->increment('queue_serving');
+        $counter->refresh();
+
+        event(new QueueUpdated($counter));
 
         return response()->json([
             'success' => true,
@@ -188,6 +202,8 @@ class ServiceCounterController extends Controller
             'queue_waiting' => 0,
             'queue_serving' => 0
         ]);
+
+        event(new QueueUpdated($counter));
 
         return response()->json([
             'success' => true,

@@ -6,11 +6,13 @@ use App\Models\ServiceQueue;
 use App\Models\ServiceCounter;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
+use App\Events\ServiceQueueUpdated;
 
 class ServiceQueueController extends Controller
 {
     /**
      * List all queue entries, optionally filtered by counter
+     * Priority people will appear first
      */
     public function listQueue($counterId = null)
     {
@@ -20,7 +22,10 @@ class ServiceQueueController extends Controller
             $query->where('service_counter_id', $counterId);
         }
 
-        $queue = $query->orderBy('created_at')->get();
+        // Order by priority first, then by created_at
+        $queue = $query->orderByDesc('is_priority')
+            ->orderBy('created_at')
+            ->get();
 
         return response()->json([
             'success' => true,
@@ -38,13 +43,11 @@ class ServiceQueueController extends Controller
             'is_priority'   => 'required|boolean', // 0 or 1
         ]);
 
-        // ---------------------------------------------------------
-        // AUTO-SELECT COUNTER BASED ON PRIORITY
-        // ---------------------------------------------------------
+        // Auto-select counter based on priority
         $counter = ServiceCounter::where('is_prioritylane', $request->is_priority)
             ->where('status', 'Active')
             ->where('is_archived', 0)
-            ->orderBy('queue_waiting', 'asc') // pick counter with shortest waiting queue
+            ->orderBy('queue_waiting', 'asc')
             ->first();
 
         if (!$counter) {
@@ -56,25 +59,19 @@ class ServiceQueueController extends Controller
             ], 404);
         }
 
-        // ---------------------------------------------------------
-        // GENERATE QUEUE NUMBER
-        // ---------------------------------------------------------
+        // Generate queue number
         $lastQueueNumber = ServiceQueue::where('service_counter_id', $counter->id)
             ->latest('id')
             ->value('queue_number');
 
         $nextNumber = 1;
-
         if ($lastQueueNumber) {
             $lastNumber = (int)substr($lastQueueNumber, strlen($counter->prefix) + 1);
             $nextNumber = $lastNumber + 1;
         }
-
         $queueNumber = $counter->prefix . '-' . str_pad($nextNumber, 3, '0', STR_PAD_LEFT);
 
-        // ---------------------------------------------------------
-        // INSERT PERSON INTO QUEUE
-        // ---------------------------------------------------------
+        // Insert person into queue
         $person = ServiceQueue::create([
             'service_counter_id' => $counter->id,
             'customer_name'      => $request->customer_name,
@@ -83,18 +80,16 @@ class ServiceQueueController extends Controller
             'status'             => 'waiting',
         ]);
 
-        // ---------------------------------------------------------
-        // UPDATE COUNTER'S WAITING QUEUE COUNT
-        // ---------------------------------------------------------
+        // Update counter's waiting queue count
         $counter->increment('queue_waiting');
 
-        // ---------------------------------------------------------
-        // SEND RESPONSE WITH QUEUE NUMBER INCLUDED
-        // ---------------------------------------------------------
+        // Fire WebSocket event
+        event(new ServiceQueueUpdated($counter));
+
         return response()->json([
             'success' => true,
             'message' => 'Person added to queue successfully.',
-            'queue_number' => $queueNumber,    // ← HERE
+            'queue_number' => $queueNumber,
             'assigned_counter' => $counter->counter_name,
             'data' => $person
         ], 201);
@@ -107,6 +102,7 @@ class ServiceQueueController extends Controller
     {
         $nextPerson = ServiceQueue::where('service_counter_id', $counterId)
             ->where('status', 'waiting')
+            ->orderByDesc('is_priority')
             ->orderBy('created_at')
             ->first();
 
@@ -118,6 +114,10 @@ class ServiceQueueController extends Controller
         }
 
         $nextPerson->update(['status' => 'serving']);
+
+        // Fire WebSocket event
+        $counter = $nextPerson->counter;
+        event(new ServiceQueueUpdated($counter));
 
         return response()->json([
             'success' => true,
@@ -166,6 +166,10 @@ class ServiceQueueController extends Controller
             'served_at' => Carbon::now(),
         ]);
 
+        // Fire WebSocket event
+        $counter = $person->counter;
+        event(new ServiceQueueUpdated($counter));
+
         return response()->json([
             'success' => true,
             'message' => 'Customer service completed.',
@@ -179,6 +183,16 @@ class ServiceQueueController extends Controller
     public function resetQueue($counterId)
     {
         ServiceQueue::where('service_counter_id', $counterId)->delete();
+
+        $counter = ServiceCounter::find($counterId);
+        if ($counter) {
+            $counter->update([
+                'queue_waiting' => 0,
+                'queue_serving' => 0
+            ]);
+
+            event(new ServiceQueueUpdated($counter));
+        }
 
         return response()->json([
             'success' => true,
