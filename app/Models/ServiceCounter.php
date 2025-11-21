@@ -19,6 +19,7 @@ class ServiceCounter extends Model
         'status',
         'queue_waiting',
         'queue_serving',
+        'is_prioritylane',
         'is_archived',
     ];
 

@@ -61,6 +61,7 @@ class ServiceCounterController extends Controller
             'counter_name' => 'required|string|max:100',
             'prefix'       => 'required|string|max:10|unique:service_counters,prefix',
             'status'       => 'nullable|in:Active,Inactive',
+            'is_prioritylane' => 'nullable|boolean',
         ]);
 
         $counter = ServiceCounter::create([
@@ -94,6 +95,7 @@ class ServiceCounterController extends Controller
             'counter_name' => 'sometimes|required|string|max:100',
             'prefix'       => 'sometimes|required|string|max:10|unique:service_counters,prefix,' . $id,
             'status'       => 'sometimes|in:Active,Inactive',
+            'is_prioritylane' => 'sometimes|boolean',
         ]);
 
         $counter->update($request->only(['counter_name', 'prefix', 'status']));

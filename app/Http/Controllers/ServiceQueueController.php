@@ -34,18 +34,37 @@ class ServiceQueueController extends Controller
     public function addPerson(Request $request)
     {
         $request->validate([
-            'service_counter_id' => 'required|exists:service_counters,id',
             'customer_name' => 'required|string|max:100',
+            'is_priority'   => 'required|boolean', // 0 or 1
         ]);
 
-        $counter = ServiceCounter::find($request->service_counter_id);
+        // ---------------------------------------------------------
+        // AUTO-SELECT COUNTER BASED ON PRIORITY
+        // ---------------------------------------------------------
+        $counter = ServiceCounter::where('is_prioritylane', $request->is_priority)
+            ->where('status', 'Active')
+            ->where('is_archived', 0)
+            ->orderBy('queue_waiting', 'asc') // pick counter with shortest waiting queue
+            ->first();
 
-        // Generate next queue number based on counter prefix
+        if (!$counter) {
+            return response()->json([
+                'success' => false,
+                'message' => $request->is_priority
+                    ? 'No priority counters available.'
+                    : 'No regular counters available.',
+            ], 404);
+        }
+
+        // ---------------------------------------------------------
+        // GENERATE QUEUE NUMBER
+        // ---------------------------------------------------------
         $lastQueueNumber = ServiceQueue::where('service_counter_id', $counter->id)
             ->latest('id')
             ->value('queue_number');
 
         $nextNumber = 1;
+
         if ($lastQueueNumber) {
             $lastNumber = (int)substr($lastQueueNumber, strlen($counter->prefix) + 1);
             $nextNumber = $lastNumber + 1;
@@ -53,16 +72,30 @@ class ServiceQueueController extends Controller
 
         $queueNumber = $counter->prefix . '-' . str_pad($nextNumber, 3, '0', STR_PAD_LEFT);
 
+        // ---------------------------------------------------------
+        // INSERT PERSON INTO QUEUE
+        // ---------------------------------------------------------
         $person = ServiceQueue::create([
             'service_counter_id' => $counter->id,
-            'customer_name' => $request->customer_name,
-            'queue_number' => $queueNumber,
-            'status' => 'waiting',
+            'customer_name'      => $request->customer_name,
+            'queue_number'       => $queueNumber,
+            'is_priority'        => $request->is_priority,
+            'status'             => 'waiting',
         ]);
 
+        // ---------------------------------------------------------
+        // UPDATE COUNTER'S WAITING QUEUE COUNT
+        // ---------------------------------------------------------
+        $counter->increment('queue_waiting');
+
+        // ---------------------------------------------------------
+        // SEND RESPONSE WITH QUEUE NUMBER INCLUDED
+        // ---------------------------------------------------------
         return response()->json([
             'success' => true,
             'message' => 'Person added to queue successfully.',
+            'queue_number' => $queueNumber,    // ← HERE
+            'assigned_counter' => $counter->counter_name,
             'data' => $person
         ], 201);
     }
