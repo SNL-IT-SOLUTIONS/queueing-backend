@@ -21,6 +21,12 @@ class ServiceCounterController extends Controller
         $totalWaiting = $counters->sum('queue_waiting');
         $totalServing = $counters->sum('queue_serving');
 
+        foreach ($counters as $counter) {
+            event(new QueueUpdated($counter));
+        }
+
+
+
         return response()->json([
             'success' => true,
             'summary' => [
@@ -39,6 +45,10 @@ class ServiceCounterController extends Controller
     public function getCounter($id)
     {
         $counter = ServiceCounter::find($id);
+
+        foreach ($counters as $counter) {
+            event(new QueueUpdated($counter));
+        }
 
         if (!$counter) {
             return response()->json([
