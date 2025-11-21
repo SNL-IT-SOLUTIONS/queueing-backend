@@ -20,3 +20,7 @@ Broadcast::channel('App.Models.User.{id}', function ($user, $id) {
 Broadcast::channel('service-counter.{counterId}', function ($user, $counterId) {
     return true;
 });
+
+Broadcast::channel('service-counters', function ($user) {
+    return true;
+});
