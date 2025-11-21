@@ -9,6 +9,7 @@ use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Log;
 
 class QueueUpdated implements ShouldBroadcast
 {
@@ -47,7 +48,7 @@ class QueueUpdated implements ShouldBroadcast
                 'served_at' => $this->queue->served_at,
             ];
         }
-
+        Log::info('Broadcast payload:', $data); // ← This will log to storage/logs/laravel.log
         return $data;
     }
 }
