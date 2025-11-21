@@ -41,6 +41,6 @@ Route::controller(ServiceQueueController::class)->group(function () {
     Route::post('queue/add-person', 'addPerson');
     Route::post('queue/call-next/{counterId}', 'callNext');
     Route::post('queue/recall/{queueId}', 'recall');
-    Route::post('queue/serve-person/{id}', 'servePerson');
-    Route::post('queue/complete-person/{id}', 'completeQueue');
+    Route::post('queue/serve-person/{queueId}', 'servePerson');
+    Route::post('queue/complete/{queueId}', 'completeQueue');
 });
