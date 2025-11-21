@@ -7,6 +7,7 @@ use App\Models\ServiceCounter;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
 use App\Events\ServiceQueueUpdated;
+use App\Events\QueueUpdated;
 
 class ServiceQueueController extends Controller
 {
@@ -83,6 +84,62 @@ class ServiceQueueController extends Controller
             'data' => $person
         ], 201);
     }
+
+
+    /**
+     * Move a person to another counter
+     */
+    public function movePerson(Request $request, $queueId)
+    {
+        $request->validate([
+            'target_counter_id' => 'required|exists:service_counters,id',
+        ]);
+
+        $person = ServiceQueue::find($queueId);
+
+        if (!$person) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Queue item not found.'
+            ], 404);
+        }
+
+        $targetCounter = ServiceCounter::find($request->target_counter_id);
+
+        if (!$targetCounter || $targetCounter->status !== 'Active') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Target counter is not available.'
+            ], 400);
+        }
+
+        $currentCounter = $person->counter;
+
+        // Update queue counts
+        if ($currentCounter) {
+            $currentCounter->decrement('queue_waiting');
+            event(new QueueUpdated($currentCounter));
+        }
+
+        $targetCounter->increment('queue_waiting');
+
+        // Move the person
+        $person->update([
+            'service_counter_id' => $targetCounter->id
+        ]);
+
+        // Broadcast new counter + moved queue
+        event(new QueueUpdated($targetCounter, $person));
+
+        return response()->json([
+            'success' => true,
+            'message' => "Customer moved to counter {$targetCounter->counter_name}.",
+            'data' => $person,
+            'from_counter' => $currentCounter?->counter_name,
+            'to_counter' => $targetCounter->counter_name,
+        ]);
+    }
+
 
     public function callNext($counterId)
     {
