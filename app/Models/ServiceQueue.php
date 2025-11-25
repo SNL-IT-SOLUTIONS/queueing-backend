@@ -19,6 +19,7 @@ class ServiceQueue extends Model
         'customer_name',
         'status',
         'served_at',
+        'is_priority',
     ];
 
     // Cast attributes
