@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Carbon\Carbon;
 use App\Events\ServiceQueueUpdated;
 use App\Events\QueueUpdated;
+use App\Events\QueueListUpdated;
 
 class ServiceQueueController extends Controller
 {
@@ -23,77 +24,90 @@ class ServiceQueueController extends Controller
             ->orderBy('created_at')
             ->get();
 
+        // ONLY broadcast if counterId provided
+        if ($counterId) {
+            event(new QueueListUpdated($counterId, $queue));
+        }
+
         return response()->json([
             'success' => true,
             'data' => $queue
         ]);
     }
 
+
     public function addPerson(Request $request)
-{
-    $request->validate([
-        'customer_name' => 'required|string|max:100',
-        'is_priority'   => 'required|boolean',
-    ]);
+    {
+        $request->validate([
+            'customer_name' => 'required|string|max:100',
+            'is_priority'   => 'required|boolean',
+        ]);
 
-    // Force priority people into priority lane only
-    if ($request->is_priority) {
-        $counter = ServiceCounter::where('is_prioritylane', 1)
-            ->where('status', 'Active')
-            ->where('is_archived', 0)
-            ->orderBy('queue_waiting', 'asc')
-            ->first();
-    } else {
-        // Regular customers go to non-priority counters
-        $counter = ServiceCounter::where('is_prioritylane', 0)
-            ->where('status', 'Active')
-            ->where('is_archived', 0)
-            ->orderBy('queue_waiting', 'asc')
-            ->first();
-    }
+        // Force priority people into priority lane only
+        if ($request->is_priority) {
+            $counter = ServiceCounter::where('is_prioritylane', 1)
+                ->where('status', 'Active')
+                ->where('is_archived', 0)
+                ->orderBy('queue_waiting', 'asc')
+                ->first();
+        } else {
+            // Regular customers go to non-priority counters
+            $counter = ServiceCounter::where('is_prioritylane', 0)
+                ->where('status', 'Active')
+                ->where('is_archived', 0)
+                ->orderBy('queue_waiting', 'asc')
+                ->first();
+        }
 
-    if (!$counter) {
+        if (!$counter) {
+            return response()->json([
+                'success' => false,
+                'message' => $request->is_priority
+                    ? 'No priority counters available.'
+                    : 'No regular counters available.',
+            ], 404);
+        }
+
+        // Get last queue number
+        $lastQueueNumber = ServiceQueue::where('service_counter_id', $counter->id)
+            ->latest('id')
+            ->value('queue_number');
+
+        $nextNumber = 1;
+        if ($lastQueueNumber) {
+            $lastNumber = (int) substr($lastQueueNumber, strlen($counter->prefix) + 1);
+            $nextNumber = $lastNumber + 1;
+        }
+
+        // Create queue number
+        $queueNumber = $counter->prefix . '-' . str_pad($nextNumber, 3, '0', STR_PAD_LEFT);
+
+        // Create person
+        $person = ServiceQueue::create([
+            'service_counter_id' => $counter->id,
+            'customer_name'      => $request->customer_name,
+            'queue_number'       => $queueNumber,
+            'is_priority'        => $request->is_priority,
+            'status'             => 'waiting',
+        ]);
+
+        // Increment waiting count
+        $counter->increment('queue_waiting');
+
+        event(new ServiceQueueUpdated($person));
+        $this->broadcastFullQueueList();
+
+
+
         return response()->json([
-            'success' => false,
-            'message' => $request->is_priority
-                ? 'No priority counters available.'
-                : 'No regular counters available.',
-        ], 404);
+            'success' => true,
+            'message' => 'Person added to queue successfully.',
+            'queue_number' => $queueNumber,
+            'assigned_counter' => $counter->counter_name,
+            'data' => $person
+        ], 201);
     }
 
-    $lastQueueNumber = ServiceQueue::where('service_counter_id', $counter->id)
-        ->latest('id')
-        ->value('queue_number');
-
-    $nextNumber = 1;
-    if ($lastQueueNumber) {
-        $lastNumber = (int)substr($lastQueueNumber, strlen($counter->prefix) + 1);
-        $nextNumber = $lastNumber + 1;
-    }
-
-    $queueNumber = $counter->prefix . '-' . str_pad($nextNumber, 3, '0', STR_PAD_LEFT);
-
-    $person = ServiceQueue::create([
-        'service_counter_id' => $counter->id,
-        'customer_name'      => $request->customer_name,
-        'queue_number'       => $queueNumber,
-        'is_priority'        => $request->is_priority,
-        'status'             => 'waiting',
-    ]);
-
-    $counter->increment('queue_waiting');
-
-    // Broadcast the new queue item
-    event(new ServiceQueueUpdated($person));
-
-    return response()->json([
-        'success' => true,
-        'message' => 'Person added to queue successfully.',
-        'queue_number' => $queueNumber,
-        'assigned_counter' => $counter->counter_name,
-        'data' => $person
-    ], 201);
-}
 
 
 
@@ -141,6 +155,7 @@ class ServiceQueueController extends Controller
 
         // Broadcast new counter + moved queue
         event(new QueueUpdated($targetCounter, $person));
+        $this->broadcastFullQueueList();
 
         return response()->json([
             'success' => true,
@@ -170,6 +185,8 @@ class ServiceQueueController extends Controller
         $nextPerson->update(['status' => 'serving']);
 
         event(new ServiceQueueUpdated($nextPerson));
+        $this->broadcastFullQueueList();
+
 
         return response()->json([
             'success' => true,
@@ -188,6 +205,8 @@ class ServiceQueueController extends Controller
                 'message' => 'No currently serving customer found.'
             ], 404);
         }
+        $this->broadcastFullQueueList();
+
 
         return response()->json([
             'success' => true,
@@ -213,6 +232,7 @@ class ServiceQueueController extends Controller
         ]);
 
         event(new ServiceQueueUpdated($person));
+        $this->broadcastFullQueueList();
 
         return response()->json([
             'success' => true,
@@ -237,10 +257,27 @@ class ServiceQueueController extends Controller
                 'queue_serving' => 0
             ]);
         }
+        $this->broadcastFullQueueList();
+
 
         return response()->json([
             'success' => true,
             'message' => 'Queue reset successfully for this counter.'
         ]);
+    }
+
+    // Helpers
+    private function broadcastFullQueueList()
+    {
+        $counters = ServiceCounter::with(['queues' => function ($q) {
+            $q->orderByDesc('is_priority')->orderBy('created_at');
+        }])
+            ->where('status', 'Active')
+            ->where('is_archived', 0)
+            ->get();
+
+        foreach ($counters as $counter) {
+            event(new QueueListUpdated($counter->id, $counter->queues));
+        }
     }
 }

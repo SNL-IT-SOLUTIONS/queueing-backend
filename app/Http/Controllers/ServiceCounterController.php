@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\ServiceCounter;
 use Illuminate\Http\Request;
 use App\Events\QueueUpdated;
+use App\Events\QueueListUpdated;
 
 class ServiceCounterController extends Controller
 {
