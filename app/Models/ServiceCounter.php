@@ -35,4 +35,11 @@ class ServiceCounter extends Model
         'queue_waiting' => 0,
         'queue_serving' => 0,
     ];
+
+    // App\Models\ServiceCounter.php
+
+    public function queues()
+    {
+        return $this->hasMany(ServiceQueue::class, 'service_counter_id');
+    }
 }
