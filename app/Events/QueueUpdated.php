@@ -48,7 +48,7 @@ class QueueUpdated implements ShouldBroadcast
                 'served_at' => $this->queue->served_at,
             ];
         }
-        Log::info('Broadcast payload:', $data); // ← This will log to storage/logs/laravel.log
+        Log::info('Broadcast payload:', $data);
         return $data;
     }
 }
