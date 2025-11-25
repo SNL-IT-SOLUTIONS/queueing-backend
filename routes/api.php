@@ -46,14 +46,3 @@ Route::controller(ServiceQueueController::class)->group(function () {
     Route::post('queue/serve-person/{queueId}', 'servePerson');
     Route::post('queue/complete/{queueId}', 'completeQueue');
 });
-
-Route::get('/test-socket', function () {
-    $queue = \App\Models\ServiceQueue::first(); // pick the first item in DB
-    if (!$queue) {
-        return "No queue items exist";
-    }
-
-    event(new \App\Events\ServiceQueueUpdated($queue));
-
-    return "Event fired";
-});

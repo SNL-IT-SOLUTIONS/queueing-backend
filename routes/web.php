@@ -1,7 +1,9 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-
+use Ramsey\Collection\Queue;
+use App\Models\ServiceCounter;
+use App\Events\QueueUpdated;
 /*
 |--------------------------------------------------------------------------
 | Web Routes
@@ -15,4 +17,14 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
     return view('welcome');
+});
+
+
+
+Route::get('/test', function () {
+    $counter = ServiceCounter::first();
+
+    event(new QueueUpdated($counter));
+
+    return "Event Fired!";
 });
