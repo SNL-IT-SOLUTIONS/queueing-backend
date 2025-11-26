@@ -45,5 +45,5 @@ Route::controller(ServiceQueueController::class)->group(function () {
     Route::post('queue/recall/{queueId}', 'recall');
     Route::post('queue/serve-person/{queueId}', 'servePerson');
     Route::post('queue/complete/{queueId}', 'completeQueue');
-    Route::post('queues/{queueId}/move', 'moveQueue');
+    Route::post('queue/{queueId}/move', 'moveQueue');
 });
